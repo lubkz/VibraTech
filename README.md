@@ -1,1 +1,69 @@
-# VibraTech
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VibraTech - Monitoramento</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #222; color: white; padding: 20px; }
+        #status-box { padding: 30px; margin: 20px auto; border-radius: 15px; font-size: 24px; font-weight: bold; transition: 0.5s; background: #444; max-width: 400px; }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer; border-radius: 10px; border: none; background: #007bff; color: white; }
+        .verde { background: #28a745 !important; }
+        .azul { background: #007bff !important; }
+        .vermelho { background: #dc3545 !important; animation: blink 0.5s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <h1>VibraTech System</h1>
+    <p>Monitoramento de Vibração Ferroviária</p>
+    
+    <button onclick="conectar()">CONECTAR VIA BLUETOOTH</button>
+
+    <div id="status-box">Aguardando Conexão...</div>
+    <p id="log">Status: Desconectado</p>
+
+    <script>
+        const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+        const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+
+        async function conectar() {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [SERVICE_UUID] }]
+                });
+                
+                document.getElementById('log').innerText = "Status: Conectando...";
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+                await characteristic.startNotifications();
+                document.getElementById('log').innerText = "Status: Monitorando!";
+                document.getElementById('status-box').innerText = "Sistema OK - Sem Alertas";
+
+                characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                    const decoder = new TextDecoder('utf-8');
+                    const msg = decoder.decode(event.target.value);
+                    atualizarPainel(msg);
+                });
+
+            } catch (error) {
+                console.log(error);
+                alert("Erro ao conectar: " + error);
+            }
+        }
+
+        function atualizarPainel(msg) {
+            const box = document.getElementById('status-box');
+            box.innerText = msg;
+            box.className = ""; // Limpa cores
+
+            if (msg.includes("L:")) box.classList.add("verde");
+            if (msg.includes("M:")) box.classList.add("azul");
+            if (msg.includes("G:")) box.classList.add("vermelho");
+        }
+    </script>
+</body>
+</html>
