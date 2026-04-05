@@ -3,30 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VibraTech - Monitoramento</title>
+    <title>VibraTech - Monitoramento Pro</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background: #222; color: white; padding: 20px; }
-        #status-box { padding: 30px; margin: 20px auto; border-radius: 15px; font-size: 24px; font-weight: bold; transition: 0.5s; background: #444; max-width: 400px; }
-        button { padding: 15px 30px; font-size: 18px; cursor: pointer; border-radius: 10px; border: none; background: #007bff; color: white; }
-        .verde { background: #28a745 !important; }
-        .azul { background: #007bff !important; }
-        .vermelho { background: #dc3545 !important; animation: blink 0.5s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #1a1a1a; color: white; padding: 20px; }
+        #status-box { padding: 30px; margin: 20px auto; border-radius: 15px; font-size: 24px; font-weight: bold; transition: 0.5s; background: #333; max-width: 500px; border: 2px solid #444; }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer; border-radius: 10px; border: none; background: #007bff; color: white; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        
+        /* Cores de Alerta */
+        .verde { background: #1e7e34 !important; box-shadow: 0 0 20px #28a745; }
+        .azul { background: #0056b3 !important; box-shadow: 0 0 20px #007bff; }
+        .vermelho { background: #bd2130 !important; box-shadow: 0 0 20px #dc3545; animation: blink 0.8s infinite; }
+        
+        /* Estilo do Histórico */
+        #historico-container { max-width: 600px; margin: 30px auto; text-align: left; background: #252525; padding: 20px; border-radius: 10px; }
+        .log-item { border-bottom: 1px solid #444; padding: 10px 0; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+        .log-item:last-child { border: none; }
+        .badge { padding: 4px 8px; border-radius: 5px; font-size: 10px; text-transform: uppercase; margin-right: 10px; font-weight: bold; }
+        .map-link { color: #00d4ff; text-decoration: none; font-size: 12px; }
+
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
 
-    <h1>VibraTech System</h1>
-    <p>Monitoramento de Vibração Ferroviária</p>
+    <h1>VibraTech - Smart Railway</h1>
+    <p>Monitoramento de Via com Georreferenciamento</p>
     
     <button onclick="conectar()">CONECTAR VIA BLUETOOTH</button>
 
     <div id="status-box">Aguardando Conexão...</div>
-    <p id="log">Status: Desconectado</p>
+    <p id="log-status">Status: Desconectado</p>
+
+    <div id="historico-container">
+        <h3>Histórico de Eventos (Local)</h3>
+        <div id="lista-historico">
+            </div>
+        <button onclick="limparHistorico()" style="background:#555; font-size: 12px; margin-top: 10px; padding: 5px 10px;">Limpar Logs</button>
+    </div>
 
     <script>
         const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
         const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+
+        // Carrega o histórico ao abrir a página
+        window.onload = renderizarHistorico;
 
         async function conectar() {
             try {
@@ -34,67 +55,103 @@
                     filters: [{ services: [SERVICE_UUID] }]
                 });
                 
-                document.getElementById('log').innerText = "Status: Conectando...";
+                document.getElementById('log-status').innerText = "Status: Conectando...";
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService(SERVICE_UUID);
                 const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
 
                 await characteristic.startNotifications();
-                document.getElementById('log').innerText = "Status: Monitorando!";
-                document.getElementById('status-box').innerText = "Sistema OK - Sem Alertas";
+                document.getElementById('log-status').innerText = "Status: Sistema Ativo";
+                document.getElementById('status-box').innerText = "Monitorando Trilhos...";
 
-                characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                characteristic.addEventListener('characteristicvaluechanged', async (event) => {
                     const decoder = new TextDecoder('utf-8');
                     const msg = decoder.decode(event.target.value);
                     atualizarPainel(msg);
+                    await registrarNoHistorico(msg); // Salva com GPS
                 });
 
             } catch (error) {
-                console.log(error);
-                alert("Erro ao conectar: " + error);
+                alert("Erro: " + error);
             }
         }
 
-        // Função Pra Salvar Dados Localmente
-        async function registrarNoHistorico(msg) {
-            const coords = await pegarLocalizacao();
-            const novoRegistro = {
-                hora: new Date().toLocaleTimeString(),
-                alerta: msg,
-                lat: coords.lat,
-                lon: coords.lon
-            };
-        
-            // Salva no "banco de dados" do navegador
-            let historico = JSON.parse(localStorage.getItem('vibratech_logs') || '[]');
-            historico.unshift(novoRegistro); // Adiciona no topo
-            localStorage.setItem('vibratech_logs', JSON.stringify(historico));
-            
-            renderizarHistorico(); // Função para atualizar a lista na tela
-        }
-        
         function atualizarPainel(msg) {
             const box = document.getElementById('status-box');
             box.innerText = msg;
-            box.className = ""; // Limpa cores
+            box.className = ""; // Reseta cores
 
             if (msg.includes("L:")) box.classList.add("verde");
             if (msg.includes("M:")) box.classList.add("azul");
             if (msg.includes("G:")) box.classList.add("vermelho");
         }
-        
+
+        // --- FUNÇÕES DE GPS E HISTÓRICO ---
+
         function pegarLocalizacao() {
             return new Promise((resolve) => {
-                navigator.geolocation.getCurrentPosition((pos) => {
-                    resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-                }, () => {
-                    resolve({ lat: "0.000", lon: "0.000" }); // Caso o GPS falhe
-                });
+                if (!navigator.geolocation) resolve({ lat: "N/A", lon: "N/A" });
+                
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => resolve({ lat: pos.coords.latitude.toFixed(5), lon: pos.coords.longitude.toFixed(5) }),
+                    () => resolve({ lat: "Sem Sinal", lon: "Sem Sinal" }),
+                    { enableHighAccuracy: true, timeout: 5000 }
+                );
             });
         }
 
-        
-        
+        async function registrarNoHistorico(msg) {
+            const coords = await pegarLocalizacao();
+            const novoRegistro = {
+                id: Date.now(),
+                hora: new Date().toLocaleTimeString(),
+                alerta: msg,
+                lat: coords.lat,
+                lon: coords.lon
+            };
+
+            let historico = JSON.parse(localStorage.getItem('vibratech_logs') || '[]');
+            historico.unshift(novoRegistro); // Novo no topo
+            localStorage.setItem('vibratech_logs', JSON.stringify(historico));
+            
+            renderizarHistorico();
+        }
+
+        function renderizarHistorico() {
+            const lista = document.getElementById('lista-historico');
+            const historico = JSON.parse(localStorage.getItem('vibratech_logs') || '[]');
+            
+            if (historico.length === 0) {
+                lista.innerHTML = "<p style='color:#777'>Nenhum registro ainda.</p>";
+                return;
+            }
+
+            lista.innerHTML = historico.map(item => `
+                <div class="log-item">
+                    <div>
+                        <span class="badge" style="background:${getCorBadge(item.alerta)}">${item.alerta.split(':')[0]}</span>
+                        <strong>${item.hora}</strong> - ${item.alerta.split(':')[1]}
+                    </div>
+                    <a class="map-link" href="https://www.google.com/maps?q=${item.lat},${item.lon}" target="_blank">
+                        📍 ${item.lat}, ${item.lon}
+                    </a>
+                </div>
+            `).join('');
+        }
+
+        function getCorBadge(msg) {
+            if (msg.includes("L:")) return "#28a745";
+            if (msg.includes("M:")) return "#007bff";
+            if (msg.includes("G:")) return "#dc3545";
+            return "#777";
+        }
+
+        function limparHistorico() {
+            if(confirm("Deseja limpar todos os logs?")) {
+                localStorage.removeItem('vibratech_logs');
+                renderizarHistorico();
+            }
+        }
     </script>
 </body>
 </html>
