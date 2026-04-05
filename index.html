@@ -55,6 +55,24 @@
             }
         }
 
+        // Função Pra Salvar Dados Localmente
+        async function registrarNoHistorico(msg) {
+            const coords = await pegarLocalizacao();
+            const novoRegistro = {
+                hora: new Date().toLocaleTimeString(),
+                alerta: msg,
+                lat: coords.lat,
+                lon: coords.lon
+            };
+        
+            // Salva no "banco de dados" do navegador
+            let historico = JSON.parse(localStorage.getItem('vibratech_logs') || '[]');
+            historico.unshift(novoRegistro); // Adiciona no topo
+            localStorage.setItem('vibratech_logs', JSON.stringify(historico));
+            
+            renderizarHistorico(); // Função para atualizar a lista na tela
+        }
+        
         function atualizarPainel(msg) {
             const box = document.getElementById('status-box');
             box.innerText = msg;
@@ -64,6 +82,19 @@
             if (msg.includes("M:")) box.classList.add("azul");
             if (msg.includes("G:")) box.classList.add("vermelho");
         }
+        
+        function pegarLocalizacao() {
+            return new Promise((resolve) => {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+                }, () => {
+                    resolve({ lat: "0.000", lon: "0.000" }); // Caso o GPS falhe
+                });
+            });
+        }
+
+        
+        
     </script>
 </body>
 </html>
